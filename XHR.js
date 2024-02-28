@@ -1,16 +1,3 @@
-
-function getCookieValue(cookieName) {
-    const cookies = document.cookie.split(';');
-    for (let i = 0; i < cookies.length; i++) {
-        const cookie = cookies[i].trim();
-        if (cookie.startsWith(cookieName + '=')) {
-            return cookie.substring(cookieName.length + 1);
-        }
-    }
-    // Cookie not found
-    return null;
-}
-
 const http = {
     username: undefined,
     password: undefined,
@@ -32,17 +19,22 @@ const http = {
     scriptPath: "javascript",
     scriptType: undefined,
     parentElement: undefined,
+    errorURLpage: undefined,
+    //  parentElement_reaction only display url. dont show error 
+    parentElement_reaction: false,
     elementEventListener: undefined,
     __construct: function (value) {
         this.username = value?.username;
         this.password = value?.password;
         this.url = value?.url;
         this.data = value?.data;
-        this.async = value?.async;
+        this.async = value?.async ?? true;
         this.method = value?.method;
         this.parentElement = value?.parentElement;
+        this.parentElement_reaction = value?.parentElement_reaction ?? false;
         this.responseType = value?.responseType;
         this.elementEventListener = value?.elementEventListener;
+        this.errorURLpage = value?.errorURLpage;
         if (value?.scriptPath) {
             this.scriptPath = value.scriptPath;
         }
@@ -76,8 +68,8 @@ const http = {
                     case 'url':
                         if (this.parentElement != undefined) {
                             // jump through isRequire method
-                            this.url = 'error/404.php';
-                        }else{
+                            this.url = this.errorURLpage?.['404'] ?? 'error/404.php';
+                        } else {
                             console.log(arg.name + " is required");
                             isUndefined = true;
                         }
@@ -135,7 +127,7 @@ const http = {
             }
 
             if (this.username == undefined) {
-                xhr.open(this.method, this.url);
+                xhr.open(this.method, this.url, this.async);
             } else {
                 xhr.open(this.method, this.url, this.async, this.username, this.password);
             }
@@ -165,13 +157,18 @@ const http = {
                 console.log('loading is ended');
                 // console.log(this.responseText);
                 if (xhr.status == 404) {
-                    console.log("i'm not found");
                     reject({
                         status: xhr.status,
                         statusText: xhr.statusText
                     });
                 }
                 this.dispatchEvent(this.elementEventListener, this.loadend);
+            }
+            xhr.onload = () => {
+                // loading is ended
+                console.log('loading is ended');
+                // console.log(this.responseText);
+                this.dispatchEvent(this.elementEventListener, this.load);
             }
 
             xhr.send(this.data);
@@ -180,16 +177,34 @@ const http = {
             result => {
                 console.log("i'm here");
                 console.log(result.statusText);
+
                 this.statusText = result.statusText;
                 this.status = result.status;
                 this.response = result.response;
                 this.responseText = result.responseText;
                 this.responseXML = result.responseXML;
                 this.responseURL = result.responseURL;
+                if (typeof value.success === "function") {
+                    // safe to use the function
+                    value.success(this);
+                }
             },
             error => {
                 this.statusText = error.statusText;
                 this.status = error.status;
+                if (this.errorURLpage?.[404] && this.parentElement) {
+                    this.loadDocument({
+                        method: "GET",
+                        url: '',
+                        parentElement: this.parentElement,
+                        errorURLpage: this.errorURLpage
+                    });
+                    // console.log('done');
+                }
+                if (typeof value.success === "function") {
+                    // safe to use the function
+                    value.error(this);
+                }
             }
         )
     },
@@ -202,7 +217,15 @@ const http = {
             return;
         }
         await this.fetch(value);
-        this.parentElement.innerHTML = this.response;
+
+        if (this.parentElement_reaction) {
+            if (this.status == 200) {
+                console.log("Document only shoooooooooooo");
+                this.parentElement.innerHTML = this.response;
+            }
+        } else {
+            this.parentElement.innerHTML = this.response;
+        }
         this.appendScript();
     },
     // --####--
@@ -268,28 +291,39 @@ const http = {
     },
     error: new CustomEvent('error', {
         detail: {
-            message: 'error occur on fetch data!'
-        }
+            message: 'error occurs on fetch data!'
+        },
+        cancelable: true
     }),
     timeout: new CustomEvent('timeout', {
         detail: {
-            message: 'timeout occur on fetch data!'
-        }
+            message: 'timeout occurs on fetch data!'
+        },
+        cancelable: true
     }),
     progress: new CustomEvent('progress', {
         detail: {
-            message: 'we\'re still in progress'
-        }
+            message: 'We \'re still in progress'
+        },
+        cancelable: true
     }),
     loadstart: new CustomEvent('loadstart', {
         detail: {
-            message: 'we start your fetch data'
-        }
+            message: 'We start your fetch data'
+        },
+        cancelable: true
     }),
     loadend: new CustomEvent('loadend', {
         detail: {
-            message: 'we done your fetch data'
-        }
+            message: 'We done your fetch data'
+        },
+        cancelable: true
+    }),
+    load: new CustomEvent('load', {
+        detail: {
+            message: 'We successfully get your fetch data'
+        },
+        cancelable: true
     }),
 
 };
